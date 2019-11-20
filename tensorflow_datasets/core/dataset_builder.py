@@ -170,6 +170,10 @@ class DatasetBuilder(object):
         even if not default. This is not recommended unless you know what you
         are doing, as the version could be broken.
     """
+    # For pickling:
+    self._original_state = dict(data_dir=data_dir, config=config,
+                                version=version)
+    # To do the work:
     self._builder_config = self._create_builder_config(config)
     # Extract code version (VERSION or config)
     if not self._builder_config and not self.VERSION:
@@ -186,6 +190,12 @@ class DatasetBuilder(object):
     else:  # Use the code version (do not restore data)
       logging.info("Load pre-computed datasetinfo (eg: splits) from bucket.")
       self.info.initialize_from_bucket()
+
+  def __getstate__(self):
+    return self._original_state
+
+  def __setstate__(self, state):
+    self.__init__(**state)
 
   @utils.memoized_property
   def canonical_version(self):
@@ -753,12 +763,10 @@ class FileAdapterBuilder(DatasetBuilder):
       return[
           tfds.core.SplitGenerator(
               name=tfds.Split.TRAIN,
-              num_shards=10,
               gen_kwargs={'file': 'train_data.zip'},
           ),
           tfds.core.SplitGenerator(
               name=tfds.Split.TEST,
-              num_shards=5,
               gen_kwargs={'file': 'test_data.zip'},
           ),
       ]
@@ -985,6 +993,10 @@ class GeneratorBasedBuilder(FileAdapterBuilder):
 class BeamBasedBuilder(FileAdapterBuilder):
   """Beam based Builder."""
 
+  def __init__(self, *args, **kwargs):
+    super(BeamBasedBuilder, self).__init__(*args, **kwargs)
+    self._beam_writers = {}  # {split: beam_writer} mapping.
+
   @abc.abstractmethod
   def _build_pcollection(self, pipeline, **kwargs):
     """Build the beam pipeline examples for each `SplitGenerator`.
@@ -993,9 +1005,6 @@ class BeamBasedBuilder(FileAdapterBuilder):
     in a Beam pipeline. It is called once for each `SplitGenerator` defined in
     `_split_generators`. The examples from the PCollection will be
     encoded and written to disk.
-
-    Beam liquid sharding can be used by setting num_shards to `None` in the
-    `SplitGenerator`.
 
     Warning: When running in a distributed setup, make sure that the data
     which will be read (download_dir, manual_dir,...) and written (data_dir)
@@ -1047,14 +1056,15 @@ class BeamBasedBuilder(FileAdapterBuilder):
           pipeline=pipeline,
       )
 
-    # Update the number of shards for splits where liquid sharding were used.
+    # Update `info.splits` with number of shards and shard lengths.
     split_dict = self.info.splits
-    for split_info in split_dict.values():
-      if not split_info.num_shards:
-        output_prefix = naming.filename_prefix_for_split(
-            self.name, split_info.name)
-        output_prefix = os.path.join(self._data_dir, output_prefix)
-        split_info.num_shards = len(tf.io.gfile.glob(output_prefix + "*"))
+    for split_name, beam_writer in self._beam_writers.items():
+      logging.info("Retrieving shard lengths for %s...", split_name)
+      shard_lengths = beam_writer.finalize()
+      split_info = split_dict[split_name]
+      split_info.shard_lengths.extend(shard_lengths)
+      split_info.num_shards = len(shard_lengths)
+    logging.info("Updating split info...")
     self.info.update_splits_if_different(split_dict)
 
   def _prepare_split(self, split_generator, pipeline):
@@ -1063,10 +1073,19 @@ class BeamBasedBuilder(FileAdapterBuilder):
     if not tf.io.gfile.exists(self._data_dir):
       tf.io.gfile.makedirs(self._data_dir)
 
-    split_info = split_generator.split_info
+    split_name = split_generator.split_info.name
     output_prefix = naming.filename_prefix_for_split(
-        self.name, split_info.name)
+        self.name, split_name)
     output_prefix = os.path.join(self._data_dir, output_prefix)
+
+    # To write examples to disk:
+    fname = "{}-{}.tfrecord".format(self.name, split_name)
+    fpath = os.path.join(self._data_dir, fname)
+    beam_writer = tfrecords_writer.BeamWriter(
+        self._example_specs, fpath, hash_salt=split_name)
+    self._beam_writers[split_name] = beam_writer
+
+    encode_example = self.info.features.encode_example
 
     # Note: We need to wrap the pipeline in a PTransform to avoid re-using the
     # same label names for each split
@@ -1076,14 +1095,9 @@ class BeamBasedBuilder(FileAdapterBuilder):
       # Encode the PCollection
       pcoll_examples = self._build_pcollection(
           pipeline, **split_generator.gen_kwargs)
-      pcoll_examples |= "Encode" >> beam.Map(self.info.features.encode_example)
-
-      # Write the example to disk
-      return self._file_format_adapter.write_from_pcollection(
-          pcoll_examples,
-          file_path_prefix=output_prefix,
-          num_shards=split_info.num_shards,
-      )
+      pcoll_examples |= "Encode" >> beam.Map(
+          lambda key_ex: (key_ex[0], encode_example(key_ex[1])))
+      return beam_writer.write_from_pcollection(pcoll_examples)
 
     # Add the PCollection to the pipeline
-    _ = pipeline | split_info.name >> _build_pcollection()   # pylint: disable=no-value-for-parameter
+    _ = pipeline | split_name >> _build_pcollection()   # pylint: disable=no-value-for-parameter
