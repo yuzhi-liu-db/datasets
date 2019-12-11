@@ -52,6 +52,10 @@ REQUIRED_PKGS = [
     'tensorflow-metadata',
     'termcolor',
     'tqdm',
+    'apache_beam',
+    'langdetect',
+    'nltk',
+    'tldextract',
     'wrapt',
     # Python 2 backports
     'bz2file;python_version<"3"',
