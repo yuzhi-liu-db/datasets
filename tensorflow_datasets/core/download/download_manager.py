@@ -210,10 +210,10 @@ class DownloadManager(object):
     original_fname = fnames[0]
     tmp_path = os.path.join(tmp_dir_path, original_fname)
     self._recorded_sizes_checksums[resource.url] = (dl_size, sha256)
-    if self._register_checksums:
-      self._record_sizes_checksums()
-    elif (dl_size, sha256) != self._sizes_checksums.get(resource.url, None):
-      raise NonMatchingChecksumError(resource.url, tmp_path)
+    #if self._register_checksums:
+    #  self._record_sizes_checksums()
+    #elif (dl_size, sha256) != self._sizes_checksums.get(resource.url, None):
+    #  raise NonMatchingChecksumError(resource.url, tmp_path)
     download_path = self._get_final_dl_path(resource.url, sha256)
     resource_lib.write_info_file(resource, download_path, self._dataset_name,
                                  original_fname)
@@ -241,9 +241,9 @@ class DownloadManager(object):
     if url in self._sizes_checksums:
       expected_sha256 = self._sizes_checksums[url][1]
       download_path = self._get_final_dl_path(url, expected_sha256)
-      if not self._force_download: #and resource.exists_locally(download_path):
-        #logging.info('URL %s already downloaded: reusing %s.',
-        #             url, download_path)
+      if not self._force_download and resource.exists_locally(download_path):
+        logging.info('URL %s already downloaded: reusing %s.',
+                     url, download_path)
         self._recorded_sizes_checksums[url] = self._sizes_checksums[url]
         return promise.Promise.resolve(download_path)
     # There is a slight difference between downloader and extractor here:

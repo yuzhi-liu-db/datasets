@@ -42,7 +42,6 @@ DOCLINES = __doc__.split('\n')
 REQUIRED_PKGS = [
     'absl-py',
     'attrs',
-    'dill',  # TODO(tfds): move to TESTS_REQUIRE.
     'future',
     'numpy',
     'promise',
@@ -71,6 +70,7 @@ TESTS_REQUIRE = [
     'apache-beam',
     'jupyter',
     'mako',
+    'dill',  # TODO(tfds): move to TESTS_REQUIRE.
     'pytest',
     'pytest-xdist',
     # Python 2 backports

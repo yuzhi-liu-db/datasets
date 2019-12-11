@@ -817,8 +817,8 @@ class FileAdapterBuilder(DatasetBuilder):
     raise NotImplementedError()
 
   def _download_and_prepare(self, dl_manager, **prepare_split_kwargs):
-    #if not tf.io.gfile.exists(self._data_dir):
-    #  tf.io.gfile.makedirs(self._data_dir)
+    if not tf.io.gfile.exists(self._data_dir):
+      tf.io.gfile.makedirs(self._data_dir)
 
     # Generating data for all splits
     split_dict = splits_lib.SplitDict()
@@ -1076,8 +1076,8 @@ class BeamBasedBuilder(FileAdapterBuilder):
   def _prepare_split(self, split_generator, pipeline):
     beam = lazy_imports_lib.lazy_imports.apache_beam
 
-    #if not tf.io.gfile.exists(self._data_dir):
-    #  tf.io.gfile.makedirs(self._data_dir)
+    if not tf.io.gfile.exists(self._data_dir):
+      tf.io.gfile.makedirs(self._data_dir)
 
     split_info = split_generator.split_info
     output_prefix = naming.filename_prefix_for_split(

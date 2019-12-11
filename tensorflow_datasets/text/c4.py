@@ -56,6 +56,7 @@ _SUPPORTED_VERSIONS = [
 
 _DOWNLOAD_HOST = "https://commoncrawl.s3.amazonaws.com"
 _WET_PATH_URL = "https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-{cc_version}/wet.paths.gz"
+_WET_PATH_URL = "gs://db-cm-dev/yliu/tensorflow_datasets/wet.paths.gz"
 _REALNEWS_DOMAINS_URL = "https://raw.githubusercontent.com/rowanz/grover/38f7184bd87237ae2d3bc330b99f1e2e246f6d51/realnews/domain_to_allowed_subdomains.json"
 _BADWORDS_URL = "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/25e679f03d96baa721cde20db9944649e8d0a844/{lang}"
 _CHECKSUMS_URL = "https://storage.googleapis.com/tfds-data/manual_checksums/c4.txt"
